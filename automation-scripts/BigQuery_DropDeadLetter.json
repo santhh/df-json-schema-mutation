@@ -1,0 +1,40 @@
+[
+  {
+    "mode": "REQUIRED", 
+    "name": "timestamp", 
+    "type": "TIMESTAMP"
+  }, 
+  {
+    "mode": "REQUIRED", 
+    "name": "payloadString", 
+    "type": "STRING"
+  }, 
+  {
+    "mode": "REQUIRED", 
+    "name": "payloadBytes", 
+    "type": "STRING"
+  }, 
+  {
+    "fields": [
+      {
+        "name": "key", 
+        "type": "STRING"
+      }, 
+      {
+        "name": "value", 
+        "type": "STRING"
+      }
+    ], 
+    "mode": "REPEATED", 
+    "name": "attributes", 
+    "type": "RECORD"
+  }, 
+  {
+    "name": "errorMessage", 
+    "type": "STRING"
+  }, 
+  {
+    "name": "stacktrace", 
+    "type": "STRING"
+  }
+]
