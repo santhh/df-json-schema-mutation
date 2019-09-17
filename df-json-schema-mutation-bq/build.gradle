@@ -34,8 +34,8 @@ apply plugin: 'idea'
 apply plugin: "net.ltgt.apt"
 apply plugin: 'com.google.cloud.tools.jib'
 
-//mainClassName = System.getProperty("mainClass")
-mainClassName = 'com.google.swarm.event.StreamingBenchmark'
+mainClassName = System.getProperty("mainClass")
+//mainClassName = 'com.google.swarm.event.StreamingBenchmark'
 
 jib {
   from {

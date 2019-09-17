@@ -164,9 +164,66 @@ Below are the quotas increased to perform performance test at 1M events /sec
 To generate load you can use this gradle command below (in a separate project). You will need to create a sample JOSN message and upload to GCS. Please check out this [repo](https://github.com/vincentrussell/json-data-generator).  
 
 ```
-gradle run -DmainClass=com.google.swarm.event.StreamingBenchmark -Pargs="--streaming --project=<id> --runner=DataflowRunner --autoscalingAlgorithm=THROUGHPUT_BASED --numWorkers=19 --maxNumWorkers=19 --workerMachineType=n1-standard-4 --qps=200000 --schemaLocation=gs://event_data/<event_type>.json --eventType=<event_type> --topic=projects/<id>/topics/user-events --templateLocation=gs://df_template_events/event-5/hunt_started_event --workerDiskType=compute.googleapis.com/<id>/zones/us-central1-b/diskTypes/pd-ssd --experiments=shuffle_mode=service"
+To build: 
 
-gcloud dataflow jobs event-type-pipeline --gcs-location gs://<bucket>/event-5/{template-name}
+gradle build -DmainClass=com.google.swarm.event.StreamingBenchmark
+
+To Create Image in GCR: 
+
+gradle jib --image=gcr.io/[PROJECT_ID]/streaming-benchmark-pipeline:latest -DmainClass=com.google.swarm.event.StreamingBenchmark 
+
+Modify the JSON config file with required parameters. 
+
+{  
+   "jobName":"streaming-benchmark-pipeline",
+   "parameters":{  
+      "schemaLocation":"gs://[bucket]/[file_name_schema].json",
+      "qps":"250000",
+      "topic":"projects/[project]/topics/events",
+      "maxNumWorkers": "10",
+      "eventType": "my-event",
+      "region": "us-central-1",
+      "experiments": "enable_streaming_engine",
+      "workerMachineType": "n1-standard-4"
+           
+     }
+      
+}
+
+Update the dynamic_template_streaming_benchmark.json file with the image name and store it in a GCS bucket that DF process can access.
+
+{
+  "docker_template_spec": {
+    "docker_image": "gcr.io/[project]/streaming-benchmark-pipeline"
+  }
+}
+
+
+Modify and execute runTemplate.sh
+
+set -x
+
+echo "please to use glocud make sure you completed authentication"
+echo "gcloud config set project templates-user"
+echo "gcloud auth application-default login"
+
+PROJECT_ID=[project]
+BUCKET_SPEC=gs://[bucket_to_store_docker_template_spec_file]
+GCS_STAGING_LOCATION=gs://[BUCKET_SPEC]/log
+
+API_ROOT_URL="https://dataflow.googleapis.com"
+TEMPLATES_LAUNCH_API="${API_ROOT_URL}/v1b3/projects/${PROJECT_ID}/templates:launch"
+JOB_NAME="streaming-benchmark-pipeline-`date +%Y%m%d-%H%M%S-%N`"
+PARAMETERS_CONFIG="@streaming_benchmark_config.json"
+echo JOB_NAME=$JOB_NAME
+
+curl -X POST -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+ "${TEMPLATES_LAUNCH_API}"`
+ `"?validateOnly=false"`
+ `"&dynamicTemplate.gcsPath=${BUCKET_SPEC}/dynamic_template_streaming_benchmark.json"`
+ `"&dynamicTemplate.stagingLocation=${GCS_STAGING_LOCATION}" \
+ -d "${PARAMETERS_CONFIG}"
 
 ```
 
