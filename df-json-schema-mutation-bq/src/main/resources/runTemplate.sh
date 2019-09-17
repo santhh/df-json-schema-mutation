@@ -6,9 +6,10 @@ echo "please to use glocud make sure you completed authentication"
 echo "gcloud config set project templates-user"
 echo "gcloud auth application-default login"
 
-PROJECT_ID=s3-dlp-experiment
-GCS_STAGING_LOCATION=gs://dynamic-template/log
-BUCKET_SPEC=gs://dynamic-template
+PROJECT_ID=[project]
+BUCKET_SPEC=gs://[dynamic_template_config_file_location]
+GCS_STAGING_LOCATION=gs://[BUCKET_SPEC]/log
+
 API_ROOT_URL="https://dataflow.googleapis.com"
 TEMPLATES_LAUNCH_API="${API_ROOT_URL}/v1b3/projects/${PROJECT_ID}/templates:launch"
 JOB_NAME="streaming-benchmark-pipeline-`date +%Y%m%d-%H%M%S-%N`"
