@@ -1,0 +1,5 @@
+
+{
+  "mainClass": "com.google.swarm.event.StreamingBenchmark",
+  "classPath": "/template/streaming-benchmark-template/libs/*:/template/streaming-benchmark-template/classes"
+}

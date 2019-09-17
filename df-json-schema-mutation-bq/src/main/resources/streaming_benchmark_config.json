@@ -1,0 +1,17 @@
+
+{  
+   "jobName":"streaming-benchmark-pipeline",
+   "parameters":{  
+      "schemaLocation":"gs://wesp/test_schema.json",
+      "qps":"250000",
+      "topic":"projects/s3-dlp-experiment/topics/events",
+      "numWorkers": "20",
+      "maxNumWorkers": "20",
+      "eventType": "wesp",
+      "region": "us-central-1",
+      "experiments": "enable_streaming_engine",
+      "workerMachineType": "n1-standard-4"
+           
+     }
+      
+}
