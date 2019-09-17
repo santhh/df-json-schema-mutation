@@ -43,102 +43,107 @@ import org.joda.time.Duration;
 
 public class StreamingBenchmark {
 
-	public static final String MESSAGE_TYPE_HEADER = "event_type";
+  public static final String MESSAGE_TYPE_HEADER = "event_type";
 
-	public interface Options extends PipelineOptions {
-		@Description("The QPS which the benchmark should output to Pub/Sub.")
-		@Required
-		Long getQps();
+  public interface Options extends PipelineOptions {
+    @Description("The QPS which the benchmark should output to Pub/Sub.")
+    @Required
+    Long getQps();
 
-		void setQps(Long value);
+    void setQps(Long value);
 
-		@Description("The path to the schema to generate.")
-		@Required
-		String getSchemaLocation();
+    @Description("The path to the schema to generate.")
+    @Required
+    String getSchemaLocation();
 
-		void setSchemaLocation(String value);
+    void setSchemaLocation(String value);
 
-		@Description("publish topic")
-		@Required
-		String getTopic();
+    @Description("publish topic")
+    @Required
+    String getTopic();
 
-		void setTopic(String value);
+    void setTopic(String value);
 
-		@Description("Event type attribute")
-		@Required
-		String getEventType();
+    @Description("Event type attribute")
+    @Required
+    String getEventType();
 
-		void setEventType(String value);
-	}
+    void setEventType(String value);
+  }
 
-	public static void main(String[] args) {
-		Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+  public static void main(String[] args) {
+    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
 
-		run(options);
-	}
+    run(options);
+  }
 
-	public static PipelineResult run(Options options) {
+  public static PipelineResult run(Options options) {
 
-		// Create the pipeline
-		Pipeline pipeline = Pipeline.create(options);
+    // Create the pipeline
+    Pipeline pipeline = Pipeline.create(options);
 
-		/*
-		 * Steps: 1) Trigger at the supplied QPS 2) Generate messages containing fake
-		 * data 3) Write messages to Pub/Sub
-		 */
-		pipeline.apply("Trigger", GenerateSequence.from(0L).withRate(options.getQps(), Duration.standardSeconds(1L)))
-				.apply("GenerateMessages",
-						ParDo.of(new MessageGeneratorFn(options.getSchemaLocation(), options.getEventType())))
-				.apply("WriteToPubsub", PubsubIO.writeMessages().to(options.getTopic()));
+    /*
+     * Steps: 1) Trigger at the supplied QPS 2) Generate messages containing fake
+     * data 3) Write messages to Pub/Sub
+     */
+    pipeline
+        .apply(
+            "Trigger",
+            GenerateSequence.from(0L).withRate(options.getQps(), Duration.standardSeconds(1L)))
+        .apply(
+            "GenerateMessages",
+            ParDo.of(new MessageGeneratorFn(options.getSchemaLocation(), options.getEventType())))
+        .apply("WriteToPubsub", PubsubIO.writeMessages().to(options.getTopic()));
 
-		return pipeline.run();
-	}
+    return pipeline.run();
+  }
 
-	static class MessageGeneratorFn extends DoFn<Long, PubsubMessage> {
+  static class MessageGeneratorFn extends DoFn<Long, PubsubMessage> {
 
-		private final String schemaLocation;
-		private String schema;
-		private String eventType;
+    private final String schemaLocation;
+    private String schema;
+    private String eventType;
 
-		private transient JsonDataGenerator dataGenerator;
+    private transient JsonDataGenerator dataGenerator;
 
-		MessageGeneratorFn(String schemaLocation, String eventType) {
-			this.schemaLocation = schemaLocation;
-			this.eventType = eventType;
-		}
+    MessageGeneratorFn(String schemaLocation, String eventType) {
+      this.schemaLocation = schemaLocation;
+      this.eventType = eventType;
+    }
 
-		@Setup
-		public void setup() throws IOException {
-			dataGenerator = new JsonDataGeneratorImpl();
-			Metadata metadata = FileSystems.matchSingleFileSpec(schemaLocation);
+    @Setup
+    public void setup() throws IOException {
+      dataGenerator = new JsonDataGeneratorImpl();
+      Metadata metadata = FileSystems.matchSingleFileSpec(schemaLocation);
 
-			// Copy the schema file into a string which can be used for generation.
-			try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
-				try (ReadableByteChannel readerChannel = FileSystems.open(metadata.resourceId())) {
-					try (WritableByteChannel writerChannel = Channels.newChannel(byteArrayOutputStream)) {
-						ByteStreams.copy(readerChannel, writerChannel);
-					}
-				}
+      // Copy the schema file into a string which can be used for generation.
+      try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
+        try (ReadableByteChannel readerChannel = FileSystems.open(metadata.resourceId())) {
+          try (WritableByteChannel writerChannel = Channels.newChannel(byteArrayOutputStream)) {
+            ByteStreams.copy(readerChannel, writerChannel);
+          }
+        }
 
-				schema = byteArrayOutputStream.toString();
-			}
-		}
+        schema = byteArrayOutputStream.toString();
+      }
+    }
 
-		@ProcessElement
-		public void processElement(ProcessContext context) throws IOException, JsonDataGeneratorException {
+    @ProcessElement
+    public void processElement(ProcessContext context)
+        throws IOException, JsonDataGeneratorException {
 
-			byte[] payload;
-			Map<String, String> attributes = Maps.newHashMap();
-			attributes.put(MESSAGE_TYPE_HEADER, this.eventType);
+      byte[] payload;
+      Map<String, String> attributes = Maps.newHashMap();
+      attributes.put(MESSAGE_TYPE_HEADER, this.eventType);
 
-			// Generate the fake JSON according to the schema.
-			try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
-				dataGenerator.generateTestDataJson(schema, byteArrayOutputStream);
+      // Generate the fake JSON according to the schema.
+      try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
+        dataGenerator.generateTestDataJson(schema, byteArrayOutputStream);
 
-				payload = byteArrayOutputStream.toByteArray();
-			}
+        payload = byteArrayOutputStream.toByteArray();
+      }
 
-			context.output(new PubsubMessage(payload, attributes));
-		}
-	}
+      context.output(new PubsubMessage(payload, attributes));
+    }
+  }
 }

@@ -15,6 +15,11 @@
  */
 package com.google.swarm.event.common;
 
+import com.google.api.services.bigquery.model.TableCell;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.auto.value.AutoValue;
+import com.google.common.base.Throwables;
+import com.google.gson.Gson;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,7 +28,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.beam.sdk.coders.Coder.Context;
 import org.apache.beam.sdk.io.gcp.bigquery.TableRowJsonCoder;
 import org.apache.beam.sdk.transforms.DoFn;
@@ -37,90 +41,91 @@ import org.apache.beam.sdk.values.TupleTagList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.api.services.bigquery.model.TableCell;
-import com.google.api.services.bigquery.model.TableRow;
-import com.google.auto.value.AutoValue;
-import com.google.common.base.Throwables;
-import com.google.gson.Gson;
-
 @AutoValue
 public abstract class FailsafeJsonToTableRowTransform<T>
-		extends PTransform<PCollection<FailsafeElement<T, KV<String, String>>>, PCollectionTuple> {
+    extends PTransform<PCollection<FailsafeElement<T, KV<String, String>>>, PCollectionTuple> {
 
-	private static final long serialVersionUID = 4211900847689851730L;
-	private static final Logger LOG = LoggerFactory.getLogger(FailsafeJsonToTableRowTransform.class);
+  private static final long serialVersionUID = 4211900847689851730L;
+  private static final Logger LOG = LoggerFactory.getLogger(FailsafeJsonToTableRowTransform.class);
 
-	public abstract TupleTag<KV<String, TableRow>> successTag();
+  public abstract TupleTag<KV<String, TableRow>> successTag();
 
-	public abstract TupleTag<FailsafeElement<T, KV<String, String>>> failureTag();
+  public abstract TupleTag<FailsafeElement<T, KV<String, String>>> failureTag();
 
-	public static <T> Builder<T> newBuilder() {
-		return new AutoValue_FailsafeJsonToTableRowTransform.Builder<>();
-	}
+  public static <T> Builder<T> newBuilder() {
+    return new AutoValue_FailsafeJsonToTableRowTransform.Builder<>();
+  }
 
-	@AutoValue.Builder
-	public abstract static class Builder<T> {
-		public abstract Builder<T> setSuccessTag(TupleTag<KV<String, TableRow>> successTag);
+  @AutoValue.Builder
+  public abstract static class Builder<T> {
+    public abstract Builder<T> setSuccessTag(TupleTag<KV<String, TableRow>> successTag);
 
-		public abstract Builder<T> setFailureTag(TupleTag<FailsafeElement<T, KV<String, String>>> failureTag);
+    public abstract Builder<T> setFailureTag(
+        TupleTag<FailsafeElement<T, KV<String, String>>> failureTag);
 
-		public abstract FailsafeJsonToTableRowTransform<T> build();
-	}
+    public abstract FailsafeJsonToTableRowTransform<T> build();
+  }
 
-	@Override
-	public PCollectionTuple expand(PCollection<FailsafeElement<T, KV<String, String>>> failsafeElements) {
-		return failsafeElements.apply("JsonToTableRow",
-				ParDo.of(new DoFn<FailsafeElement<T, KV<String, String>>, KV<String, TableRow>>() {
-					Gson gson = null;
-					Map<String, Object> map = new HashMap<String, Object>();
+  @Override
+  public PCollectionTuple expand(
+      PCollection<FailsafeElement<T, KV<String, String>>> failsafeElements) {
+    return failsafeElements.apply(
+        "JsonToTableRow",
+        ParDo.of(
+                new DoFn<FailsafeElement<T, KV<String, String>>, KV<String, TableRow>>() {
+                  Gson gson = null;
+                  Map<String, Object> map = new HashMap<String, Object>();
 
-					@Setup
-					public void setup() {
-						gson = new Gson();
-					}
+                  @Setup
+                  public void setup() {
+                    gson = new Gson();
+                  }
 
-					@SuppressWarnings("unchecked")
-					@ProcessElement
-					public void processElement(ProcessContext context) {
-						FailsafeElement<T, KV<String, String>> element = context.element();
-						KV<String, String> jsonWithAttribute = element.getPayload();
-						try {
-							String json = jsonWithAttribute.getValue();
+                  @SuppressWarnings("unchecked")
+                  @ProcessElement
+                  public void processElement(ProcessContext context) {
+                    FailsafeElement<T, KV<String, String>> element = context.element();
+                    KV<String, String> jsonWithAttribute = element.getPayload();
+                    try {
+                      String json = jsonWithAttribute.getValue();
 
-							TableRow row = convertJsonToTableRow(jsonWithAttribute.getValue());
-							List<TableCell> cells = new ArrayList<>();
-							map = new HashMap<String, Object>();
-							map = gson.fromJson(json, map.getClass());
+                      TableRow row = convertJsonToTableRow(jsonWithAttribute.getValue());
+                      List<TableCell> cells = new ArrayList<>();
+                      map = new HashMap<String, Object>();
+                      map = gson.fromJson(json, map.getClass());
 
-							map.forEach((key, value) -> {
-								cells.add(new TableCell().set(key, value));
+                      map.forEach(
+                          (key, value) -> {
+                            cells.add(new TableCell().set(key, value));
+                          });
 
-							});
+                      row.setF(cells);
+                      context.output(KV.of(jsonWithAttribute.getKey(), row));
+                    } catch (Exception e) {
+                      context.output(
+                          failureTag(),
+                          FailsafeElement.of(element.getOriginalPayload(), jsonWithAttribute)
+                              .setErrorMessage(e.getMessage())
+                              .setStacktrace(Throwables.getStackTraceAsString(e)));
+                    }
+                  }
+                })
+            .withOutputTags(successTag(), TupleTagList.of(failureTag())));
+  }
 
-							row.setF(cells);
-							context.output(KV.of(jsonWithAttribute.getKey(), row));
-						} catch (Exception e) {
-							context.output(failureTag(),
-									FailsafeElement.of(element.getOriginalPayload(), jsonWithAttribute)
-											.setErrorMessage(e.getMessage())
-											.setStacktrace(Throwables.getStackTraceAsString(e)));
-						}
-					}
-				}).withOutputTags(successTag(), TupleTagList.of(failureTag())));
-	}
+  private static TableRow convertJsonToTableRow(String json) {
+    TableRow row;
 
-	private static TableRow convertJsonToTableRow(String json) {
-		TableRow row;
+    try (InputStream inputStream =
+        new ByteArrayInputStream(json.trim().getBytes(StandardCharsets.UTF_8))) {
 
-		try (InputStream inputStream = new ByteArrayInputStream(json.trim().getBytes(StandardCharsets.UTF_8))) {
+      row = TableRowJsonCoder.of().decode(inputStream, Context.OUTER);
 
-			row = TableRowJsonCoder.of().decode(inputStream, Context.OUTER);
+    } catch (IOException e) {
+      LOG.error("Can't parse JSON message", e.toString());
+      throw new RuntimeException("Failed to serialize json to table row: " + json, e);
+    }
 
-		} catch (IOException e) {
-			LOG.error("Can't parse JSON message", e.toString());
-			throw new RuntimeException("Failed to serialize json to table row: " + json, e);
-		}
-
-		return row;
-	}
+    return row;
+  }
 }

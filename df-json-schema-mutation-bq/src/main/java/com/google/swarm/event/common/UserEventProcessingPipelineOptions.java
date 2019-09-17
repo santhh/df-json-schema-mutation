@@ -20,30 +20,30 @@ import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.ValueProvider;
 
 public interface UserEventProcessingPipelineOptions extends DataflowPipelineOptions {
-	@Description("Table spec to write the output to")
-	ValueProvider<String> getDataSetId();
+  @Description("Table spec to write the output to")
+  ValueProvider<String> getDataSetId();
 
-	void setDataSetId(ValueProvider<String> value);
+  void setDataSetId(ValueProvider<String> value);
 
-	@Description("Subscribtion to read from")
-	ValueProvider<String> getSubTopic();
+  @Description("Subscribtion to read from")
+  ValueProvider<String> getSubTopic();
 
-	void setSubTopic(ValueProvider<String> value);
+  void setSubTopic(ValueProvider<String> value);
 
-	@Description("The dead-letter table to output to within BigQuery in <project-id>:<dataset>.<table> "
-			+ "format. If it doesn't exist, it will be created during pipeline execution.")
-	ValueProvider<String> getOutputDeadletterTable();
+  @Description(
+      "The dead-letter table to output to within BigQuery in <project-id>:<dataset>.<table> "
+          + "format. If it doesn't exist, it will be created during pipeline execution.")
+  ValueProvider<String> getOutputDeadletterTable();
 
-	void setOutputDeadletterTable(ValueProvider<String> value);
+  void setOutputDeadletterTable(ValueProvider<String> value);
 
-	@Description("The Google Cloud Bigtable instance ID .")
-	ValueProvider<String> getBigtableInstanceId();
+  @Description("The Google Cloud Bigtable instance ID .")
+  ValueProvider<String> getBigtableInstanceId();
 
-	void setBigtableInstanceId(ValueProvider<String> value);
+  void setBigtableInstanceId(ValueProvider<String> value);
 
-	@Description("The Cloud Bigtable table ID in the instance." )
-	ValueProvider<String> getBigtableTableId();
+  @Description("The Cloud Bigtable table ID in the instance.")
+  ValueProvider<String> getBigtableTableId();
 
-	void setBigtableTableId(ValueProvider<String> value);
-
+  void setBigtableTableId(ValueProvider<String> value);
 }

@@ -23,7 +23,8 @@ buildscript {
     }
     dependencies {
         classpath "net.ltgt.gradle:gradle-apt-plugin:0.19"
-         classpath "gradle.plugin.com.google.cloud.tools:jib-gradle-plugin:1.4.0"
+        classpath "gradle.plugin.com.google.cloud.tools:jib-gradle-plugin:1.4.0"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:3.24.2"
         
     }
 }
@@ -33,6 +34,7 @@ apply plugin: 'eclipse'
 apply plugin: 'idea'
 apply plugin: "net.ltgt.apt"
 apply plugin: 'com.google.cloud.tools.jib'
+apply plugin: "com.diffplug.gradle.spotless"
 
 mainClassName = System.getProperty("mainClass")
 //mainClassName = 'com.google.swarm.event.StreamingBenchmark'
@@ -110,6 +112,11 @@ run {
     if (project.hasProperty('args')) {
         args project.args.split('\\s')
     }
+}
+spotless {
+  java {
+    googleJavaFormat()
+  }
 }
 run.mustRunAfter 'resources'
 configurations.all {

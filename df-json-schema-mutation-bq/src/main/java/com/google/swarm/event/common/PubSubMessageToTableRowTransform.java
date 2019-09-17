@@ -15,8 +15,8 @@
  */
 package com.google.swarm.event.common;
 
+import com.google.api.services.bigquery.model.TableRow;
 import java.nio.charset.StandardCharsets;
-
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubMessage;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.PTransform;
@@ -28,46 +28,51 @@ import org.apache.beam.sdk.values.TupleTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.api.services.bigquery.model.TableRow;
+public class PubSubMessageToTableRowTransform
+    extends PTransform<PCollection<PubsubMessage>, PCollectionTuple> {
 
-public class PubSubMessageToTableRowTransform extends PTransform<PCollection<PubsubMessage>, PCollectionTuple> {
+  private static final long serialVersionUID = -5720471132168764669L;
 
-	private static final long serialVersionUID = -5720471132168764669L;
+  private static final Logger LOG = LoggerFactory.getLogger(PubSubMessageToTableRowTransform.class);
 
-	private static final Logger LOG = LoggerFactory.getLogger(PubSubMessageToTableRowTransform.class);
+  public static final TupleTag<KV<String, TableRow>> TRANSFORM_OUT =
+      new TupleTag<KV<String, TableRow>>() {};
+  public static final TupleTag<FailsafeElement<PubsubMessage, KV<String, String>>>
+      TRANSFORM_DEADLETTER_OUT =
+          new TupleTag<FailsafeElement<PubsubMessage, KV<String, String>>>() {};
 
-	public static final TupleTag<KV<String, TableRow>> TRANSFORM_OUT = new TupleTag<KV<String, TableRow>>() {
-	};
-	public static final TupleTag<FailsafeElement<PubsubMessage, KV<String, String>>> TRANSFORM_DEADLETTER_OUT = new TupleTag<FailsafeElement<PubsubMessage, KV<String, String>>>() {
-	};
+  @Override
+  public PCollectionTuple expand(PCollection<PubsubMessage> input) {
+    PCollectionTuple jsonToTableRowOut =
+        input
+            .apply("MapToRecord", ParDo.of(new PubsubMessageToFailsafeElementFn()))
+            .apply(
+                "JsonToTableRow",
+                FailsafeJsonToTableRowTransform.<PubsubMessage>newBuilder()
+                    .setSuccessTag(TRANSFORM_OUT)
+                    .setFailureTag(TRANSFORM_DEADLETTER_OUT)
+                    .build());
 
-	@Override
-	public PCollectionTuple expand(PCollection<PubsubMessage> input) {
-		PCollectionTuple jsonToTableRowOut = input
-				.apply("MapToRecord", ParDo.of(new PubsubMessageToFailsafeElementFn()))
-				.apply("JsonToTableRow", FailsafeJsonToTableRowTransform.<PubsubMessage>newBuilder()
-						.setSuccessTag(TRANSFORM_OUT).setFailureTag(TRANSFORM_DEADLETTER_OUT).build());
+    return PCollectionTuple.of(TRANSFORM_OUT, jsonToTableRowOut.get(TRANSFORM_OUT))
+        .and(TRANSFORM_DEADLETTER_OUT, jsonToTableRowOut.get(TRANSFORM_DEADLETTER_OUT));
+  }
 
-		return PCollectionTuple.of(TRANSFORM_OUT, jsonToTableRowOut.get(TRANSFORM_OUT)).and(TRANSFORM_DEADLETTER_OUT,
-				jsonToTableRowOut.get(TRANSFORM_DEADLETTER_OUT));
-	}
+  static class PubsubMessageToFailsafeElementFn
+      extends DoFn<PubsubMessage, FailsafeElement<PubsubMessage, KV<String, String>>> {
+    @ProcessElement
+    public void processElement(ProcessContext context) {
+      PubsubMessage message = context.element();
+      String eventType = message.getAttribute("event_type");
+      if (eventType != null) {
 
-	static class PubsubMessageToFailsafeElementFn
-			extends DoFn<PubsubMessage, FailsafeElement<PubsubMessage, KV<String, String>>> {
-		@ProcessElement
-		public void processElement(ProcessContext context) {
-			PubsubMessage message = context.element();
-			String eventType = message.getAttribute("event_type");
-			if (eventType != null) {
-
-				context.output(FailsafeElement.of(message,
-						KV.of(eventType, new String(message.getPayload(), StandardCharsets.UTF_8))));
-			} else {
-				LOG.error("Message must contain event_type attribute {}", message.toString());
-				throw new RuntimeException("Failed to parse message attribute " + message.toString());
-
-			}
-		}
-	}
-
+        context.output(
+            FailsafeElement.of(
+                message,
+                KV.of(eventType, new String(message.getPayload(), StandardCharsets.UTF_8))));
+      } else {
+        LOG.error("Message must contain event_type attribute {}", message.toString());
+        throw new RuntimeException("Failed to parse message attribute " + message.toString());
+      }
+    }
+  }
 }
